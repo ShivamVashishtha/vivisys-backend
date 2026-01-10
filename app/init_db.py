@@ -1,22 +1,16 @@
-from .db import engine, Base
-from . import models  # noqa: F401
-
+# app/init_db.py
 import os
-from app.db import engine
-from app.models import Base  # <-- adjust if your Base is located elsewhere
+import logging
 
-def init_db() -> None:
-    # Optional: gate init behind flag so you can control it in prod
-    run_init = os.getenv("RUN_DB_INIT", "false").lower() in {"1", "true", "yes"}
+from .db import Base, engine
+from . import models  # noqa: F401  (ensures models are imported)
 
-    if engine is None:
-        print("DATABASE_URL not set; skipping DB init.")
-        return
+logger = logging.getLogger(__name__)
 
-    if not run_init:
-        print("RUN_DB_INIT not enabled; skipping Base.metadata.create_all().")
+def init_db():
+    if os.getenv("RUN_DB_INIT", "").lower() not in ("1", "true", "yes", "on"):
+        logger.info("RUN_DB_INIT not enabled; skipping Base.metadata.create_all().")
         return
 
     Base.metadata.create_all(bind=engine)
-    print("DB init done: Base.metadata.create_all()")
-
+    logger.info("DB init complete: Base.metadata.create_all() ran.")
