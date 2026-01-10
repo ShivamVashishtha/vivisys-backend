@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from app.init_db import init_db
 
 from .init_db import init_db
 from .routes_auth import router as auth_router
@@ -7,7 +9,7 @@ from .routes_patients import router as patients_router
 from .routes_consents import router as consents_router
 from .routes_records import router as records_router
 
-app = FastAPI(title="Medaryx API")
+app = FastAPI()
 
 # ✅ CORS must be added right after app is created
 app.add_middleware(
