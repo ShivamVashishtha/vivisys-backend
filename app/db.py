@@ -2,10 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import os
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://medaryx:medaryx@localhost:5432/medaryxdb",
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL or ":PORT" in DATABASE_URL or "PORT" in DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is missing or invalid. On Railway, set DATABASE_URL to the full Postgres connection string "
+        "(postgresql://user:pass@host:5432/dbname)."
+    )
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
