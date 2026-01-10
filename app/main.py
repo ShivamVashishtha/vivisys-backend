@@ -3,7 +3,8 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from sqlalchemy import text
+from app.db import engine
 from app.init_db import init_db
 
 app = FastAPI()
@@ -20,6 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/db-ping")
+def db_ping():
+    with engine.connect() as conn:
+        val = conn.execute(text("select 1")).scalar_one()
+    return {"db": "ok", "select_1": val}
+    
 @app.on_event("startup")
 def on_startup():
     init_db()
