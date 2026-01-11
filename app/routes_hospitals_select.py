@@ -12,7 +12,7 @@ from .models_hospitals import PatientHospitalSelection
 
 # Use your existing auth dependency that returns current user
 # (adjust import name if yours differs)
-from .routes_auth import get_current_user  # must exist in your project
+from .deps import get_current_user
 from .crud import get_patient_by_user_id  # must exist in your project
 
 router = APIRouter(prefix="/patients/me", tags=["hospitals"])
