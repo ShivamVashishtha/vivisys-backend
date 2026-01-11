@@ -45,10 +45,10 @@ app.add_middleware(
 )
 
 # ---- Routers ----
-app.include_router(auth_router)
-app.include_router(patients_router)
-app.include_router(consents_router)
-app.include_router(records_router)
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(patients_router, prefix="/patients", tags=["patients"])
+app.include_router(consents_router, prefix="/consents", tags=["consents"])
+app.include_router(records_router, prefix="/records", tags=["records"])
 
 @app.get("/health")
 def health():
