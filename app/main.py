@@ -11,6 +11,8 @@ from .routes_patients import router as patients_router
 from .routes_consents import router as consents_router
 from .routes_records import router as records_router
 from .routes_hospitals_cms import router as hospitals_router
+from .routes_hospitals_select import router as hospitals_select_router
+
 
 # ✅ NEW: mock FHIR router
 from .routes_fhir import router as fhir_router
@@ -38,6 +40,8 @@ app.include_router(patients_router)
 app.include_router(consents_router)
 app.include_router(records_router)
 app.include_router(hospitals_router)
+app.include_router(hospitals_select_router)
+
 
 # ✅ NEW: serve /fhir inside this same API
 # (this makes http://localhost:8080/fhir/... valid in Railway)
