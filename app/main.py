@@ -1,36 +1,46 @@
 # app/main.py
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-from app.db import engine
-from app.init_db import init_db
 
-app = FastAPI()
+from .init_db import init_db
+from .routes_auth import router as auth_router
+from .routes_patients import router as patients_router
+from .routes_consents import router as consents_router
+from .routes_records import router as records_router
 
-# CORS (adjust origins later if needed)
-origins_env = os.getenv("CORS_ORIGINS", "*")
-origins = ["*"] if origins_env.strip() == "*" else [o.strip() for o in origins_env.split(",") if o.strip()]
+app = FastAPI(title="Medaryx API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        # add your Netlify domain here too, e.g.
+        # "https://YOUR-SITE.netlify.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/db-ping")
-def db_ping():
-    with engine.connect() as conn:
-        val = conn.execute(text("select 1")).scalar_one()
-    return {"db": "ok", "select_1": val}
-    
 @app.on_event("startup")
-def on_startup():
+def startup():
     init_db()
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# IMPORTANT: mount each router WITHOUT adding another prefix here
+# (the router files will own their prefixes)
+app.include_router(auth_router)
+app.include_router(patients_router)
+app.include_router(consents_router)
+app.include_router(records_router)
+
+# Optional: print routes at boot so you can confirm /auth/login exists
+for r in app.routes:
+    methods = getattr(r, "methods", None)
+    path = getattr(r, "path", None)
+    if methods and path:
+        print(sorted(list(methods)), path)
