@@ -1,3 +1,4 @@
+# app/routes_consents.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ from . import crud
 from .models import Patient
 
 router = APIRouter(prefix="/consents", tags=["consents"])
+
+ALLOWED_SCOPES = {"immunizations", "allergies", "conditions", "all"}
 
 
 def _ensure_patient_owner(db: Session, user, patient_identifier: str) -> Patient:
@@ -56,6 +59,11 @@ def grant_consent(
         raise HTTPException(status_code=400, detail="expires_at must be in the future")
 
     scope = crud.normalize_scope(data.scope)
+
+    # ✅ allow "all"
+    if scope not in ALLOWED_SCOPES:
+        raise HTTPException(status_code=400, detail="Invalid scope")
+
     c = crud.grant_consent(db, p.id, grantee.id, scope, expires_at)
 
     crud.log(
