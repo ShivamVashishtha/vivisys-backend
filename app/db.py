@@ -1,20 +1,32 @@
 # app/db.py
-# app/db.py
 import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ✅ Railway: if you don't have Postgres yet, use SQLite in /tmp
-if not DATABASE_URL:
-    DATABASE_URL = "sqlite:////tmp/app.db"
+def _database_url() -> str:
+    """
+    Priority:
+      1) DATABASE_URL (Railway)
+      2) DB_URL (optional custom)
+      3) local sqlite fallback (for local dev)
+    """
+    url = os.getenv("DATABASE_URL") or os.getenv("DB_URL")
+    if not url:
+        return "sqlite:///./dev.db"
 
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    # Railway/Heroku sometimes provide postgres:// which SQLAlchemy expects as postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
 
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    return url
+
+
+DATABASE_URL = _database_url()
+
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
 
 engine = create_engine(
     DATABASE_URL,
@@ -26,8 +38,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-
 def get_db():
+    """
+    FastAPI dependency:
+      db = Depends(get_db)
+    """
     db = SessionLocal()
     try:
         yield db
