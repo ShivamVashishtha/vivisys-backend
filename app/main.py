@@ -17,7 +17,7 @@ def _split_origins(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-app = FastAPI(title="ViviSys API")
+app = FastAPI()
 
 # ---- CORS (fixes OPTIONS 400 + browser "Failed to fetch") ----
 cors_env = os.getenv("CORS_ORIGINS", "").strip()
@@ -35,10 +35,13 @@ else:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=[
+        "https://vivisys.net",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],  # includes Authorization
+    allow_headers=["*"],
 )
 
 # ---- Routers ----
