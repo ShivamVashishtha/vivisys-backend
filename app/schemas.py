@@ -1,12 +1,8 @@
-# app/schemas.py
-from __future__ import annotations
-
 from datetime import datetime
 from datetime import date as date_type
 from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr
-
 
 Role = Literal["guardian", "doctor", "patient", "clinic_admin"]
 Scope = Literal["immunizations", "allergies", "conditions"]
@@ -79,7 +75,7 @@ class ConsentListOut(BaseModel):
 class SelfPointerIn(BaseModel):
     scope: Literal["immunizations", "allergies", "conditions"]
     fhir_resource_id: str
-    issuer: Optional[str] = None
+    issuer: str | None = None
 
 
 class SelfPointerOut(BaseModel):
