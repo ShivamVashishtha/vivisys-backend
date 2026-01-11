@@ -1,10 +1,19 @@
+# app/crud.py
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from datetime import datetime
+
 from .models import User, Patient, ConsentGrant, RecordPointer, AuditLog, generate_public_patient_id
 from .auth import hash_password, verify_password
-from .models import ConsentGrant, Patient, User, RecordPointer
+
 
 def normalize_scope(scope: str) -> str:
+    """
+    Normalize scope strings and aliases.
+    Supports:
+      - immunizations, allergies, conditions
+      - all (wildcard)
+    """
     s = (scope or "").strip().lower()
     aliases = {
         "immunization": "immunizations",
@@ -13,6 +22,8 @@ def normalize_scope(scope: str) -> str:
         "allergies": "allergies",
         "condition": "conditions",
         "conditions": "conditions",
+        "all": "all",
+        "*": "all",
     }
     return aliases.get(s, s)
 
@@ -67,7 +78,14 @@ def create_patient(db: Session, guardian_user_id: str) -> Patient:
             db.add(p)
             db.commit()
             db.refresh(p)
-            db.add(AuditLog(actor_user_id=guardian_user_id, patient_id=p.id, action="PATIENT_CREATE", details=f"public_id={p.public_id}"))
+            db.add(
+                AuditLog(
+                    actor_user_id=guardian_user_id,
+                    patient_id=p.id,
+                    action="PATIENT_CREATE",
+                    details=f"public_id={p.public_id}",
+                )
+            )
             db.commit()
             return p
 
@@ -89,25 +107,29 @@ def grant_consent(db: Session, patient_id: str, grantee_user_id: str, scope: str
     return c
 
 
-def has_valid_consent(db, patient_id, doctor_user_id, scope, now):
+def has_valid_consent(db: Session, patient_id: str, doctor_user_id: str, scope: str, now: datetime) -> bool:
+    """
+    Returns True if doctor has a non-revoked, non-expired consent for:
+      - the requested scope, OR
+      - scope == 'all' (wildcard)
+    """
     scope = normalize_scope(scope)
 
-    return (
+    c = (
         db.query(ConsentGrant)
         .filter(ConsentGrant.patient_id == patient_id)
         .filter(ConsentGrant.grantee_user_id == doctor_user_id)
-        .filter(ConsentGrant.scope == scope)
+        .filter(or_(ConsentGrant.scope == scope, ConsentGrant.scope == "all"))
         .filter(ConsentGrant.expires_at > now)
-        .filter(ConsentGrant.revoked == False)
+        .filter(ConsentGrant.revoked == False)  # noqa: E712
         .first()
-        is not None
     )
-
-    return db.query(q.exists()).scalar()
+    return c is not None
 
 
 def get_patient_by_user_id(db: Session, user_id: str) -> Patient | None:
     return db.query(Patient).filter(Patient.user_id == user_id).first()
+
 
 def list_consents_for_patient(db: Session, patient_id: str) -> list[tuple[ConsentGrant, User]]:
     """
