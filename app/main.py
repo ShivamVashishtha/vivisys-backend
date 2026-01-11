@@ -5,49 +5,47 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .init_db import init_db
 
+# import your routers
 from .routes_auth import router as auth_router
 from .routes_patients import router as patients_router
 from .routes_consents import router as consents_router
 from .routes_records import router as records_router
 
-app = FastAPI()
+app = FastAPI(title="ViviSys API")
 
-# ✅ CORS (must be added immediately after app = FastAPI())
-# Put your real frontend URL(s) in Railway env var CORS_ORIGINS as comma-separated.
-# Example:
-# CORS_ORIGINS=https://your-site.netlify.app,http://localhost:3000
-cors_origins_env = os.getenv("CORS_ORIGINS", "")
-origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+# IMPORTANT: CORS must be added BEFORE requests hit routes
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://vivisys.net",
+    "https://www.vivisys.net",
+]
 
-# sensible defaults for local dev
-if not origins:
-    origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+# If you want quick dev-mode CORS, you can set:
+# CORS_ALLOW_ALL=true
+if os.getenv("CORS_ALLOW_ALL", "").lower() in ("1", "true", "yes", "on"):
+    allow_origins = ["*"]
+else:
+    allow_origins = ALLOWED_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=False,  # keep False when using "*" origins
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.on_event("startup")
-def startup():
-    # Only run create_all if explicitly enabled
-    if os.getenv("RUN_DB_INIT", "").lower() in ("1", "true", "yes", "on"):
-        print("RUN_DB_INIT enabled; running Base.metadata.create_all()...")
-        init_db()
-    else:
-        print("RUN_DB_INIT not enabled; skipping Base.metadata.create_all().")
+def _startup():
+    init_db()
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"ok": True}
 
-app.include_router(auth_router)
-app.include_router(patients_router)
-app.include_router(consents_router)
-app.include_router(records_router)
+# Routers
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(patients_router, tags=["patients"])
+app.include_router(consents_router, prefix="/consents", tags=["consents"])
+app.include_router(records_router, prefix="/records", tags=["records"])
