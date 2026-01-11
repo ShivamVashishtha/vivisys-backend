@@ -1,6 +1,8 @@
 # app/init_db.py
 import os
 from .db import engine, Base
+from . import models_hospitals  # noqa: F401
+
 
 def init_db():
     """
