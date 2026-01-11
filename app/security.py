@@ -1,55 +1,35 @@
-# app/security.py
-from __future__ import annotations
-
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Dict
 
-from jose import JWTError, jwt
+from jose import jwt
 from passlib.context import CryptContext
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
+JWT_ALG = os.getenv("JWT_ALG", "HS256")
+JWT_EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", "60"))
 
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(password: str, password_hash: str) -> bool:
+    return pwd_context.verify(password, password_hash)
 
 
-# JWT settings
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-change-me")  # set in Railway
-JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", "60"))
-
-
-def create_access_token(
-    subject: str,
-    role: str,
-    expires_minutes: Optional[int] = None,
-    extra: Optional[dict[str, Any]] = None,
-) -> str:
+def create_access_token(subject: str, extra: Dict[str, Any] | None = None) -> str:
     now = datetime.now(timezone.utc)
-    exp = now + timedelta(minutes=expires_minutes or JWT_EXPIRES_MINUTES)
+    exp = now + timedelta(minutes=JWT_EXPIRES_MIN)
 
-    payload: dict[str, Any] = {
-        "sub": subject,   # typically email or user_id
-        "role": role,
+    payload: Dict[str, Any] = {
+        "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
     }
-
     if extra:
         payload.update(extra)
 
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-
-def decode_token(token: str) -> dict[str, Any]:
-    try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except JWTError as e:
-        raise ValueError("Invalid token") from e
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
