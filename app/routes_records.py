@@ -1,3 +1,8 @@
+# app/routes_records.py
+import os
+import httpx
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -8,11 +13,10 @@ from . import crud
 from .fhir_client import fetch_fhir_resource
 from .schemas import SelfPointerIn, SelfPointerOut
 from .schemas import CatalogCreateIn, CatalogCreateOut
-import httpx
-from datetime import datetime, timezone
 
 router = APIRouter(prefix="/records", tags=["records"])
 
+FHIR_BASE_URL = os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir").rstrip("/")
 
 @router.get("/patients/{patient_identifier}")
 async def get_records(
@@ -28,7 +32,6 @@ async def get_records(
     if not p:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     if not crud.has_valid_consent(db, p.id, user.id, scope, now):
         raise HTTPException(status_code=403, detail="No valid consent for this scope")
@@ -55,13 +58,14 @@ async def get_records(
         resource = await fetch_fhir_resource(
             ptr.fhir_base_url, ptr.fhir_resource_type, ptr.fhir_resource_id
         )
-        results.append({
-            "issuer": ptr.issuer,
-            "pointer_id": ptr.id,
-            "resource": resource,
-            "missing": bool(resource.get("_error")),
-    })
-
+        results.append(
+            {
+                "issuer": ptr.issuer,
+                "pointer_id": ptr.id,
+                "resource": resource,
+                "missing": bool(resource.get("_error")),
+            }
+        )
 
     crud.log(
         db,
@@ -86,11 +90,6 @@ async def get_my_records(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Patient self-access endpoint (18+).
-    Patient must have a linked Patient row: patients.user_id == current user.id.
-    No consent check is required because this is self-access.
-    """
     if user.role != "patient":
         raise HTTPException(status_code=403, detail="Only patients can view /records/me")
 
@@ -126,13 +125,14 @@ async def get_my_records(
         resource = await fetch_fhir_resource(
             ptr.fhir_base_url, ptr.fhir_resource_type, ptr.fhir_resource_id
         )
-        results.append({
-            "issuer": ptr.issuer,
-            "pointer_id": ptr.id,
-            "resource": resource,
-            "missing": bool(resource.get("_error")),
-    })
-
+        results.append(
+            {
+                "issuer": ptr.issuer,
+                "pointer_id": ptr.id,
+                "resource": resource,
+                "missing": bool(resource.get("_error")),
+            }
+        )
 
     crud.log(
         db,
@@ -150,18 +150,25 @@ async def get_my_records(
         "records": results,
     }
 
+
 @router.post("/me/pointers", response_model=SelfPointerOut)
 def add_my_pointer(
     data: SelfPointerIn,
     db: Session = Depends(get_db),
-    user = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     if user.role != "patient":
         raise HTTPException(status_code=403, detail="Only patients can add their own pointers")
 
     p = db.query(Patient).filter(Patient.user_id == user.id).first()
     if not p:
-        raise HTTPException(status_code=404, detail="Patient profile not found. Call POST /patients/self/register.")
+        raise HTTPException(
+            status_code=404,
+            detail="Patient profile not found. Call POST /patients/self/register.",
+        )
+
+    # ✅ FIX: use the scope from the request body
+    scope = crud.normalize_scope(data.scope)
 
     scope_to_pointer = {
         "immunizations": ("immunization", "Immunization"),
@@ -174,7 +181,6 @@ def add_my_pointer(
 
     record_type, fhir_resource_type = scope_to_pointer[scope]
 
-
     fhir_id = (data.fhir_resource_id or "").strip()
     if not fhir_id:
         raise HTTPException(status_code=400, detail="fhir_resource_id is required")
@@ -183,7 +189,7 @@ def add_my_pointer(
         db,
         patient_id=p.id,
         record_type=record_type,
-        fhir_base_url="http://localhost:8080/fhir",
+        fhir_base_url=FHIR_BASE_URL,
         fhir_resource_type=fhir_resource_type,
         fhir_resource_id=fhir_id,
         issuer=(data.issuer or "Self (Patient)"),
@@ -194,26 +200,33 @@ def add_my_pointer(
         actor_user_id=user.id,
         patient_id=p.id,
         action="POINTER_CREATE_SELF",
-        details=f"scope={scope} fhir={fhir_resource_type}/{fhir_id} issuer={data.issuer or 'Self (Patient)'} patient_public_id={p.public_id}",
+        details=(
+            f"scope={scope} fhir={fhir_resource_type}/{fhir_id} "
+            f"issuer={data.issuer or 'Self (Patient)'} patient_public_id={p.public_id}"
+        ),
     )
 
     return {"status": "ok", "pointer_id": ptr.id, "record_type": ptr.record_type}
+
 
 @router.post("/me/catalog/create", response_model=CatalogCreateOut)
 async def create_from_catalog_and_link(
     data: CatalogCreateIn,
     db: Session = Depends(get_db),
-    user = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     if user.role != "patient":
         raise HTTPException(status_code=403, detail="Only patients can create and link their records")
 
     p = db.query(Patient).filter(Patient.user_id == user.id).first()
     if not p:
-        raise HTTPException(status_code=404, detail="Patient profile not found. Call POST /patients/self/register.")
-    
+        raise HTTPException(
+            status_code=404,
+            detail="Patient profile not found. Call POST /patients/self/register.",
+        )
+
     scope = crud.normalize_scope(data.scope)
-    
+
     scope_map = {
         "immunizations": ("immunization", "Immunization"),
         "conditions": ("condition", "Condition"),
@@ -221,14 +234,13 @@ async def create_from_catalog_and_link(
     }
     if scope not in scope_map:
         raise HTTPException(status_code=400, detail="Invalid scope")
+
     record_type, fhir_type = scope_map[scope]
 
     issuer = (data.issuer or "Self (Patient)").strip()
-    display = data.display.strip()
+    display = (data.display or "").strip()
     if not display:
         raise HTTPException(status_code=400, detail="display is required")
-
-    base_url = "http://localhost:8080/fhir"
 
     # Minimal FHIR resource bodies for demo
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -255,37 +267,43 @@ async def create_from_catalog_and_link(
             "recordedDate": now_iso,
         }
 
-    # Create on HAPI FHIR
+    # Create on our mock FHIR (or whatever FHIR_BASE_URL points to)
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.post(
-            f"{base_url}/{fhir_type}",
+            f"{FHIR_BASE_URL}/{fhir_type}",
             json=payload,
-            headers={"Accept": "application/fhir+json", "Content-Type": "application/fhir+json"},
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
         )
 
-    r.raise_for_status()
+    # ✅ Avoid opaque 500s: return a useful upstream error if FHIR fails
+    if r.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"FHIR upstream error: {r.status_code} {r.text}",
+        )
 
-    # HAPI returns created resource; ID is usually in the body or Location header
     body = r.json()
-    created_id = body.get("id")
+    created_id = (body.get("id") or "").strip()
 
     if not created_id:
         loc = r.headers.get("location") or r.headers.get("Location") or ""
-        # e.g. http://localhost:8080/fhir/Immunization/123/_history/1
-        parts = loc.split("/")
+        parts = [p for p in loc.split("/") if p]
         if fhir_type in parts:
             idx = parts.index(fhir_type)
             if idx + 1 < len(parts):
                 created_id = parts[idx + 1]
 
     if not created_id:
-        raise HTTPException(status_code=500, detail="FHIR resource created but id could not be determined")
+        raise HTTPException(
+            status_code=500,
+            detail="FHIR resource created but id could not be determined",
+        )
 
     ptr = crud.create_pointer_for_patient(
         db,
         patient_id=p.id,
         record_type=record_type,
-        fhir_base_url=base_url,
+        fhir_base_url=FHIR_BASE_URL,
         fhir_resource_type=fhir_type,
         fhir_resource_id=created_id,
         issuer=issuer,
