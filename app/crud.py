@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime
-from .models_providers_select import PatientProviderSelection
+from .models_providers import PatientProviderSelection
 from .models import User, Patient, ConsentGrant, RecordPointer, AuditLog, generate_public_patient_id
 from .auth import hash_password, verify_password
 
