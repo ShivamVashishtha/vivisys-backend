@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime
-
+from .models_providers_select import PatientProviderSelection
 from .models import User, Patient, ConsentGrant, RecordPointer, AuditLog, generate_public_patient_id
 from .auth import hash_password, verify_password
 
@@ -177,3 +177,65 @@ def create_pointer_for_patient(
     db.commit()
     db.refresh(ptr)
     return ptr
+
+
+def get_provider_selection(db: Session, patient_id: int) -> PatientProviderSelection | None:
+    return (
+        db.query(PatientProviderSelection)
+        .filter(PatientProviderSelection.patient_id == patient_id)
+        .one_or_none()
+    )
+
+
+def upsert_provider_selection(
+    db: Session,
+    patient_id: int,
+    *,
+    npi: str,
+    name: str,
+    taxonomy_desc: str | None = None,
+    telephone_number: str | None = None,
+    line1: str | None = None,
+    line2: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    postal_code: str | None = None,
+) -> PatientProviderSelection:
+    row = get_provider_selection(db, patient_id)
+    if row is None:
+        row = PatientProviderSelection(
+            patient_id=patient_id,
+            npi=npi,
+            name=name,
+            taxonomy_desc=taxonomy_desc,
+            telephone_number=telephone_number,
+            line1=line1,
+            line2=line2,
+            city=city,
+            state=state,
+            postal_code=postal_code,
+        )
+        db.add(row)
+    else:
+        row.npi = npi
+        row.name = name
+        row.taxonomy_desc = taxonomy_desc
+        row.telephone_number = telephone_number
+        row.line1 = line1
+        row.line2 = line2
+        row.city = city
+        row.state = state
+        row.postal_code = postal_code
+
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def clear_provider_selection(db: Session, patient_id: int) -> bool:
+    row = get_provider_selection(db, patient_id)
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
