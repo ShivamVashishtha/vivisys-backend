@@ -3,7 +3,7 @@ import os
 from .db import engine, Base
 from . import models_hospitals  # noqa: F401
 from . import models_providers  # noqa: F401
-from .models_providers_select import PatientProviderSelection  # noqa: F401
+from .models_providers import PatientProviderSelection  # noqa: F401
 
 
 
