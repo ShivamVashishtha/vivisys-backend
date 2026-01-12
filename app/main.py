@@ -12,6 +12,7 @@ from .routes_consents import router as consents_router
 from .routes_records import router as records_router
 from .routes_hospitals_cms import router as hospitals_router
 from .routes_hospitals_select import router as hospitals_select_router
+from .routes_providers_cms import router as providers_cms_router
 
 
 # ✅ NEW: mock FHIR router
@@ -41,6 +42,7 @@ app.include_router(consents_router)
 app.include_router(records_router)
 app.include_router(hospitals_router)
 app.include_router(hospitals_select_router)
+app.include_router(providers_cms_router)
 
 
 # ✅ NEW: serve /fhir inside this same API
