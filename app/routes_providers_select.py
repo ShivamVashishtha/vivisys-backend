@@ -8,7 +8,7 @@ from .crud import get_provider_selection, upsert_provider_selection, clear_provi
 # IMPORTANT: match whatever your hospital selection routes use.
 # Your earlier error was importing get_current_user from routes_auth.
 # Your project already uses deps_auth in working routes.
-from .deps_auth import get_current_user  # <-- keep consistent with your existing auth dependency
+from .deps import get_current_user
 from .crud import get_patient_by_user_id  # this should already exist in your crud.py
 
 
