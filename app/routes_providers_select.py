@@ -1,138 +1,95 @@
-# app/routes_providers_select.py
-from __future__ import annotations
-
-from typing import Optional, Any
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-import uuid
 
 from .db import get_db
-from .deps import get_current_user
-from .crud import get_patient_by_user_id
-from .models_providers import PatientProviderSelection
+from .crud import get_provider_selection, upsert_provider_selection, clear_provider_selection
 
-router = APIRouter(prefix="/patients/me", tags=["providers"])
-
-
-class ProviderSelectionIn(BaseModel):
-    npi: str = Field(..., min_length=5)
-    name: str = Field(..., min_length=2)
-
-    telephone_number: Optional[str] = None
-    taxonomy_desc: Optional[str] = None
-
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
+# IMPORTANT: match whatever your hospital selection routes use.
+# Your earlier error was importing get_current_user from routes_auth.
+# Your project already uses deps_auth in working routes.
+from .deps_auth import get_current_user  # <-- keep consistent with your existing auth dependency
+from .crud import get_patient_by_user_id  # this should already exist in your crud.py
 
 
-class ProviderSelectionOut(BaseModel):
-    provider_npi: str
-    provider_name: str
-    provider_phone: Optional[str] = None
-    taxonomy_desc: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
+router = APIRouter(prefix="/providers", tags=["providers"])
 
 
-@router.get("/provider", response_model=Optional[ProviderSelectionOut])
-def get_my_selected_provider(
+class ProviderSelectIn(BaseModel):
+    npi: str
+    name: str
+    taxonomy_desc: str | None = None
+    telephone_number: str | None = None
+    line1: str | None = None
+    line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+
+
+@router.get("/me")
+def get_my_provider(
     db: Session = Depends(get_db),
-    user: Any = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     patient = get_patient_by_user_id(db, user.id)
     if not patient:
-        return None
+        return {"selected": None}
 
-    row = (
-        db.query(PatientProviderSelection)
-        .filter(PatientProviderSelection.patient_id == patient.id)
-        .first()
-    )
+    row = get_provider_selection(db, patient.id)
     if not row:
-        return None
+        return {"selected": None}
 
-    return ProviderSelectionOut(
-        provider_npi=row.provider_npi,
-        provider_name=row.provider_name,
-        provider_phone=row.provider_phone,
-        taxonomy_desc=row.taxonomy_desc,
-        city=row.city,
-        state=row.state,
-        postal_code=row.postal_code,
-    )
+    return {
+        "selected": {
+            "npi": row.npi,
+            "name": row.name,
+            "taxonomy_desc": row.taxonomy_desc,
+            "telephone_number": row.telephone_number,
+            "line1": row.line1,
+            "line2": row.line2,
+            "city": row.city,
+            "state": row.state,
+            "postal_code": row.postal_code,
+        }
+    }
 
 
-@router.post("/provider", response_model=ProviderSelectionOut)
-def set_my_selected_provider(
-    payload: ProviderSelectionIn,
+@router.post("/me/select")
+def set_my_provider(
+    payload: ProviderSelectIn,
     db: Session = Depends(get_db),
-    user: Any = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     patient = get_patient_by_user_id(db, user.id)
     if not patient:
-        raise HTTPException(status_code=400, detail="Patient profile not found. Please self-register first.")
+        # if you prefer raising HTTPException, do it. keeping minimal.
+        return {"status": "error", "message": "patient profile not found"}
 
-    row = (
-        db.query(PatientProviderSelection)
-        .filter(PatientProviderSelection.patient_id == patient.id)
-        .first()
+    row = upsert_provider_selection(
+        db,
+        patient.id,
+        npi=payload.npi,
+        name=payload.name,
+        taxonomy_desc=payload.taxonomy_desc,
+        telephone_number=payload.telephone_number,
+        line1=payload.line1,
+        line2=payload.line2,
+        city=payload.city,
+        state=payload.state,
+        postal_code=payload.postal_code,
     )
-
-    if not row:
-        row = PatientProviderSelection(
-            id=str(uuid.uuid4()),
-            patient_id=patient.id,
-            provider_npi=payload.npi,
-            provider_name=payload.name,
-            provider_phone=payload.telephone_number,
-            taxonomy_desc=payload.taxonomy_desc,
-            city=payload.city,
-            state=payload.state,
-            postal_code=payload.postal_code,
-        )
-        db.add(row)
-    else:
-        row.provider_npi = payload.npi
-        row.provider_name = payload.name
-        row.provider_phone = payload.telephone_number
-        row.taxonomy_desc = payload.taxonomy_desc
-        row.city = payload.city
-        row.state = payload.state
-        row.postal_code = payload.postal_code
-
-    db.commit()
-    db.refresh(row)
-
-    return ProviderSelectionOut(
-        provider_npi=row.provider_npi,
-        provider_name=row.provider_name,
-        provider_phone=row.provider_phone,
-        taxonomy_desc=row.taxonomy_desc,
-        city=row.city,
-        state=row.state,
-        postal_code=row.postal_code,
-    )
+    return {"status": "ok", "selected": {"npi": row.npi, "name": row.name}}
 
 
-@router.delete("/provider")
-def clear_my_selected_provider(
+@router.post("/me/clear")
+def clear_my_provider(
     db: Session = Depends(get_db),
-    user: Any = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     patient = get_patient_by_user_id(db, user.id)
     if not patient:
-        return {"status": "ok"}
+        return {"status": "ok", "cleared": False}
 
-    row = (
-        db.query(PatientProviderSelection)
-        .filter(PatientProviderSelection.patient_id == patient.id)
-        .first()
-    )
-    if row:
-        db.delete(row)
-        db.commit()
-
-    return {"status": "ok"}
+    cleared = clear_provider_selection(db, patient.id)
+    return {"status": "ok", "cleared": cleared}
